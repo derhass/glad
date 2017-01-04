@@ -5,6 +5,7 @@ from glad.lang.c.loader.wgl import WGLCLoader
 
 from glad.lang.c.generator import CGenerator
 from glad.lang.c.debug import CDebugGenerator
+from glad.lang.c.struct import CStructGenerator
 
 
 _specs = {
@@ -16,7 +17,8 @@ _specs = {
 
 _generators = {
     'c': CGenerator,
-    'c-debug': CDebugGenerator
+    'c-debug': CDebugGenerator,
+    'c-struct': CStructGenerator
 }
 
 

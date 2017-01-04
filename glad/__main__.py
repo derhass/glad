@@ -92,7 +92,7 @@ def main():
                         help='API type/version pairs, like "gl=3.2,gles=", '
                              'no version means latest')
     parser.add_argument('--generator', dest='generator', default='d',
-                        choices=['c', 'c-debug', 'd', 'nim', 'volt'], required=True,
+                        choices=['c', 'c-debug', 'c-struct', 'd', 'nim', 'volt'], required=True,
                         help='Language to generate the binding for')
     parser.add_argument('--extensions', dest='extensions',
                         default=None, type=ext_file,

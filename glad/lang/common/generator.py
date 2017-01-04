@@ -83,10 +83,17 @@ class Generator(object):
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
+    def generate_parts(self, types, features, extensions, enums, functions, fs, es):
+        self.generate_header()
+        self.generate_types(types)
+        self.generate_features(features)
+        self.generate_extensions(extensions, enums, functions)
+        self.generate_loader(fs, es)
+
     def generate(self):
-        features = list()
+        #features = list() TODO: what is this needed for?
         for api, version in self.api.items():
-            features.extend(self.spec.features[api])
+            #features.extend(self.spec.features[api]) TODO!!!
 
             if version is None:
                 version = list(self.spec.features[api].keys())[-1]
@@ -113,24 +120,19 @@ class Generator(object):
                     .format(ext, self.spec.NAME)
                 )
 
-        self.generate_header()
-
         types = [t for t in self.spec.types if t.api is None or t.api in self.api]
-        self.generate_types(types)
 
         f = list()
         for api, version in self.api.items():
             f.extend([value for key, value in self.spec.features[api].items()
                         if key <= version])
         enums, functions = merge(f)
-        self.generate_features(f)
 
         extensions = list()
         for api in self.api:
             extensions.extend(self.spec.extensions[api][ext]
                               for ext in self.extension_names if ext
                               in self.spec.extensions[api])
-        self.generate_extensions(extensions, enums, functions)
 
         fs = defaultdict(list)
         es = defaultdict(list)
@@ -142,7 +144,7 @@ class Generator(object):
             es[api].extend(self.spec.extensions[api][ext]
                            for ext in self.extension_names if ext
                            in self.spec.extensions[api])
-        self.generate_loader(fs, es)
+        self.generate_parts(types, f, extensions, enums, functions, fs, es)
 
     @property
     def header(self):
