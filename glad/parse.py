@@ -186,6 +186,10 @@ class Command(object):
     def __init__(self, element, spec):
         self.proto = Proto(element.find('proto'))
         self.params = [Param(ele, spec) for ele in element.iter('param')]
+	try:
+		self.alias = element.find('alias').attrib['name']
+	except AttributeError:
+		self.alias = None
 
     def __hash__(self):
         return hash(self.proto.name)
