@@ -1,17 +1,129 @@
 from glad.lang.c.loader.gl import OpenGLCLoader
-from glad.lang.c.loader import LOAD_OPENGL_DLL, LOAD_OPENGL_DLL_H, LOAD_OPENGL_GLAPI_H
+from glad.lang.c.loader import LOAD_OPENGL_DLL_H, LOAD_OPENGL_GLAPI_H
 
+LOAD_OPENGL_DLL = '''
+%(pre)s void* %(proc)s(const char *namez, void *arg);
+
+#ifdef _WIN32
+#include <windows.h>
+
+typedef void* (APIENTRYP PFNWGLGETPROCADDRESSPROC_PRIVATE)(const char*);
+
+typedef struct {
+	HMODULE libGL;
+	PFNWGLGETPROCADDRESSPROC_PRIVATE gladGetProcAddressPtr;
+} GLADGLLibrary;
+
+%(pre)s
+int %(init)s(GLADGLLibrary *gl) {
+    gl->libGL = LoadLibraryW(L"opengl32.dll");
+    if(gl->libGL != NULL) {
+        gl->gladGetProcAddressPtr = (PFNWGLGETPROCADDRESSPROC_PRIVATE)GetProcAddress(
+                gl->libGL, "wglGetProcAddress");
+        return gl->gladGetProcAddressPtr != NULL;
+    }
+
+    return 0;
+}
+
+%(pre)s
+void %(terminate)s(GLADGLLibrary *gl) {
+    if(gl->libGL != NULL) {
+        FreeLibrary(gl->libGL);
+        gl->libGL = NULL;
+    }
+}
+#else
+#include <dlfcn.h>
+
+typedef void* (APIENTRYP PFNGLXGETPROCADDRESSPROC_PRIVATE)(const char*);
+
+typedef struct {
+	void* libGL;
+#ifndef __APPLE__
+	PFNGLXGETPROCADDRESSPROC_PRIVATE gladGetProcAddressPtr;
+#endif
+} GLADGLLibrary;
+
+%(pre)s
+int %(init)s(GLADGLLibrary *gl) {
+#ifdef __APPLE__
+    static const char *NAMES[] = {
+        "../Frameworks/OpenGL.framework/OpenGL",
+        "/Library/Frameworks/OpenGL.framework/OpenGL",
+        "/System/Library/Frameworks/OpenGL.framework/OpenGL",
+        "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL"
+    };
+#else
+    static const char *NAMES[] = {"libGL.so.1", "libGL.so"};
+#endif
+
+    unsigned int index = 0;
+    for(index = 0; index < (sizeof(NAMES) / sizeof(NAMES[0])); index++) {
+        gl->libGL = dlopen(NAMES[index], RTLD_NOW | RTLD_GLOBAL);
+
+        if(gl->libGL != NULL) {
+#ifdef __APPLE__
+            return 1;
+#else
+            gl->gladGetProcAddressPtr = (PFNGLXGETPROCADDRESSPROC_PRIVATE)dlsym(gl->libGL,
+                "glXGetProcAddressARB");
+            return gl->gladGetProcAddressPtr != NULL;
+#endif
+        }
+    }
+
+    return 0;
+}
+
+%(pre)s
+void %(terminate)s(GLADGLLibrary *gl) {
+    if(gl->libGL != NULL) {
+        dlclose(gl->libGL);
+        gl->libGL = NULL;
+    }
+}
+#endif
+
+%(pre)s
+void* %(proc)s(const char *namez, void *v_gl) {
+    GLADGLLibrary *gl=(GLADGLLibrary*)v_gl;
+    void* result = NULL;
+    if(gl->libGL == NULL) return NULL;
+
+#ifndef __APPLE__
+    if(gl->gladGetProcAddressPtr != NULL) {
+        result = gl->gladGetProcAddressPtr(namez);
+    }
+#endif
+    if(result == NULL) {
+#ifdef _WIN32
+        result = (void*)GetProcAddress(gl->libGL, namez);
+#else
+        result = dlsym(gl->libGL, namez);
+#endif
+    }
+
+    return result;
+}
+
+static void* load_proc_wrapper(const char *name, void *arg)
+{
+	return ((GLADloadproc)arg)(name);
+}
+'''
 
 _OPENGL_LOADER = \
     LOAD_OPENGL_DLL % {'pre':'static', 'init':'open_gl',
                        'proc':'get_proc', 'terminate':'close_gl'} + '''
 int gladLoadGL(GLADFeatures *features, GLADDispatchTable *dispatch) {
     int status = 0;
+    GLADGLLibrary gl;
 
-    if(open_gl()) {
-        status = gladLoadGLLoader(features, dispatch, &get_proc);
-        close_gl();
+    if(open_gl(&gl)) {
+        status = gladLoadGLLoaderEXT(features, dispatch, get_proc, &gl);
     }
+    close_gl(&gl);
 
     return status;
 }
@@ -153,6 +265,7 @@ struct gladGLversionStruct {
 };
 
 typedef void* (* GLADloadproc)(const char *name);
+typedef void* (* GLADloadprocwitharg)(const char *name, void *);
 ''' + LOAD_OPENGL_GLAPI_H + '''
 '''
 
@@ -219,7 +332,7 @@ class OpenGLCStructLoader(OpenGLCLoader):
         fobj.write('\tgladExtensionContextInit(&ctx);\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
-        fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load("glGetString");\n')
+        fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load("glGetString", arg);\n')
         fobj.write('\tif(dispatch->GetString == NULL) return 0;\n')
         fobj.write('\tif(dispatch->GetString(GL_VERSION) == NULL) return 0;\n')
 

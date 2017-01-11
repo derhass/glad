@@ -72,10 +72,13 @@ class CStructGenerator(CGenerator):
         for api in self.api:
             if api == 'glx':
                 f.write('GLAPI int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc, Display *dpy, int screen);\n\n'.format(api.upper()))
+                f.write('GLAPI int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg, void *arg, Display *dpy, int screen);\n\n'.format(api.upper()))
             elif api == 'wgl':
                 f.write('GLAPI int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc, HDC hdc);\n\n'.format(api.upper()))
+                f.write('GLAPI int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg, void *arg, HDC hdc);\n\n'.format(api.upper()))
             else:
                 f.write('GLAPI int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc);\n\n'.format(api.upper()))
+                f.write('GLAPI int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg, void *arg);\n\n'.format(api.upper()))
 
     def generate_loader(self, features, extensions):
         f = self._f_c
@@ -86,12 +89,12 @@ class CStructGenerator(CGenerator):
         written = set()
         for api, version in self.api.items():
             for feature in features[api]:
-                f.write('static void load_{}(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load) {{\n'
+                f.write('static void load_{}(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg load, void *arg) {{\n'
                         .format(feature.name))
                 if self.spec.NAME in ('gl', 'glx', 'wgl'):
                     f.write('\tif(!features->GLAD_{}) return;\n'.format(feature.name))
                 for func in feature.functions:
-                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}");\n'
+                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}",arg);\n'
                             .format(func.proto.name[2:], func.proto.name.upper(),func.proto.name))
                 f.write('}\n')
 
@@ -99,7 +102,7 @@ class CStructGenerator(CGenerator):
                 if len(list(ext.functions)) == 0 or ext.name in written:
                     continue
 
-                f.write('static void load_{}(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load) {{\n'
+                f.write('static void load_{}(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg load, void *arg) {{\n'
                         .format(ext.name))
                 if self.spec.NAME in ('gl', 'glx', 'wgl'):
                     f.write('\tif(!features->GLAD_{}) return;\n'.format(ext.name))
@@ -107,7 +110,7 @@ class CStructGenerator(CGenerator):
                 if ext.name == 'GLX_SGIX_dmbuffer': f.write('#ifdef _DM_BUFFER_H_\n')
                 for func in ext.functions:
                     # even if they were in written we need to load it
-                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}");\n'
+                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}",arg);\n'
                             .format(func.proto.name[2:], func.proto.name.upper(), func.proto.name))
                 if ext.name in ('GLX_SGIX_video_source', 'GLX_SGIX_dmbuffer'):
                     f.write('#else\n')
@@ -145,12 +148,13 @@ class CStructGenerator(CGenerator):
                 f.write('\t}\n')
             f.write('}\n\n')
 
+            # the _internal function does the real work
             if api == 'glx':
-                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load, Display *dpy, int screen) {{\n'.format(api.upper()))
+                f.write('int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg load, void *arg, Display *dpy, int screen) {{\n'.format(api.upper()))
             elif api == 'wgl':
-                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load, HDC hdc) {{\n'.format(api.upper()))
+                f.write('int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg load, void *arg, HDC hdc) {{\n'.format(api.upper()))
             else:
-                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load) {{\n'.format(api.upper()))
+                f.write('int gladLoad{}LoaderEXT(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadprocwitharg load, void *arg) {{\n'.format(api.upper()))
 
             self.loader.write_begin_load(f)
 
@@ -162,14 +166,28 @@ class CStructGenerator(CGenerator):
                 f.write('\tfind_core{}(features, dispatch);\n'.format(api.upper()))
 
             for feature in features[api]:
-                f.write('\tload_{}(features, dispatch, load);\n'.format(feature.name))
+                f.write('\tload_{}(features, dispatch, load, arg);\n'.format(feature.name))
             f.write('\n\tif (!find_extensions{}(&ctx,features, dispatch)) return 0;\n'.format(api.upper()))
             for ext in extensions[api]:
                 if len(list(ext.functions)) == 0:
                     continue
-                f.write('\tload_{}(features, dispatch, load);\n'.format(ext.name))
+                f.write('\tload_{}(features, dispatch, load, arg);\n'.format(ext.name))
 
             self.loader.write_end_load(f)
+            f.write('}\n\n')
+            # write the wrapper for the DLL loader, ARGH!
+            if api == 'glx':
+                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load, Display *dpy, int screen) {{\n'.format(api.upper()))
+            elif api == 'wgl':
+                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load, HDC hdc) {{\n'.format(api.upper()))
+            else:
+                f.write('int gladLoad{}Loader(GLADFeatures *features, GLADDispatchTable *dispatch, GLADloadproc load) {{\n'.format(api.upper()))
+            if api == 'glx':
+                f.write('\treturn gladLoad{}LoaderEXT(features, dispatch, load_proc_wrapper, load, dpy, screen);\n'.format(api.upper()))
+            elif api == 'wgl':
+                f.write('\treturn gladLoad{}LoaderEXT(features, dispatch, load_proc_wrapper, load, hdc);\n'.format(api.upper()))
+            else:
+                f.write('\treturn gladLoad{}LoaderEXT(features, dispatch, load_proc_wrapper, load);\n'.format(api.upper()))
             f.write('}\n\n')
 
         self.loader.write_header_end(self._f_h)
