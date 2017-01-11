@@ -321,6 +321,57 @@ _FIND_VERSION = '''
     features->maxLoadedGLVersion.major = major; features->maxLoadedGLVersion.minor = minor;
 '''
 
+_OPENGL_DISPATCH = '''
+GLADDispatchOffset gladGetDispatchOffset(const char *name)
+{
+	GLADDispatchOffset i;
+	for (i=(GLADDispatchOffset)0; i<GLAD_DISPATCH_COUNT; i++) {
+	if (!strcmp(gladGetDispatchName(i),name))
+		break;
+	}
+	return i;
+}
+
+void **gladDispatchGetFPtr(GLADDispatchTable *dispatch,  GLADDispatchOffset doffset)
+{
+	/* evil */
+	return (doffset < GLAD_DISPATCH_COUNT)?(((void**)dispatch)+doffset):NULL;
+}
+
+void *gladDispatchGetOffsetAddress(GLADDispatchTable *dispatch, GLADDispatchOffset doffset)
+{
+	void **fptr=gladDispatchGetFPtr(dispatch, doffset);
+	return (fptr)?*fptr:NULL;
+}
+
+void gladDispatchSetOffsetAddress(GLADDispatchTable *dispatch, GLADDispatchOffset doffset, void *proc)
+{
+	void **fptr=gladDispatchGetFPtr(dispatch, doffset);
+	if (fptr)
+		*fptr=proc;
+}
+
+void *gladDispatchGetProcAddress(GLADDispatchTable *dispatch, const char *name)
+{
+	return gladDispatchGetOffsetAddress(dispatch, gladGetDispatchOffset(name));
+}
+
+void gladDispatchSetProcAddress(GLADDispatchTable *dispatch, const char *name, void *proc)
+{
+	gladDispatchSetOffsetAddress(dispatch, gladGetDispatchOffset(name), proc);
+}
+'''
+
+_OPENGL_DISPATCH_H = '''
+GLAPI void gladDispatchInit(GLADDispatchTable *dispatch);
+GLAPI const char* gladGetDispatchName(GLADDispatchOffset offset);
+GLAPI GLADDispatchOffset gladGetDispatchOffset(const char *name);
+GLAPI void **gladDispatchGetFPtr(GLADDispatchTable *dispatch,  GLADDispatchOffset doffset);
+GLAPI void *gladDispatchGetOffsetAddress(GLADDispatchTable *dispatch, GLADDispatchOffset doffset);
+GLAPI void gladDispatchSetOffsetAddress(GLADDispatchTable *dispatch, GLADDispatchOffset doffset, void *proc);
+GLAPI void *gladDispatchGetProcAddress(GLADDispatchTable *dispatch, const char *name);
+GLAPI void gladDispatchSetProcAddress(GLADDispatchTable *dispatch, const char *name, void *proc);
+'''
 
 class OpenGLCStructLoader(OpenGLCLoader):
     def write(self, fobj):
@@ -332,7 +383,7 @@ class OpenGLCStructLoader(OpenGLCLoader):
         fobj.write('\tgladExtensionContextInit(&ctx);\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
-        fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load("glGetString", arg);\n')
+        fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load(gladGetDispatchName(GLAD_DISPATCH_glGetString), arg);\n')
         fobj.write('\tif(dispatch->GetString == NULL) return 0;\n')
         fobj.write('\tif(dispatch->GetString(GL_VERSION) == NULL) return 0;\n')
 
@@ -365,3 +416,9 @@ class OpenGLCStructLoader(OpenGLCLoader):
 
     def write_header_end(self, fobj):
         fobj.write(_OPENGL_HEADER_END)
+
+    def write_dispatch(self, fobj):
+        fobj.write(_OPENGL_DISPATCH)
+
+    def write_dispatch_h(self, fobj):
+        fobj.write(_OPENGL_DISPATCH_H)

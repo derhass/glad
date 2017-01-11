@@ -15,7 +15,7 @@ class CStructGenerator(CGenerator):
 	funclist=sorted(write)
 
         f = self._f_h
-	# header: define the features struct
+        # header: define the features struct
         if self.spec.NAME in ('gl', 'glx', 'wgl'):
             f.write('struct GLADFeatures_s {\n')
             f.write('\tstruct gladGLversionStruct GLVersion;\n')
@@ -26,20 +26,48 @@ class CStructGenerator(CGenerator):
                 f.write('\tint GLAD_{};\n'.format(ext.name))
             f.write('};\n')
 
-	# header: define the dispatch table struct
+        # header: define the dispatch table struct
         f.write('struct GLADDispatchTable_s {\n')
         for func in funclist:
             self.write_function_pointer_decl(f, func)
         f.write('};\n')
 
-        f = self._f_c
-	# C code: define the function pointers
-	#TODO: will need this for init etc
-        #for func in funclist:
-        #    self.write_function(f, func)
+        # header: define the dispatch offset enum type
+        self.dispatch_offset_enum(funclist)
+        self.loader.write_dispatch_h(self._f_h)
 
-	# generate the loader code
+        f = self._f_c
+        self.dispatch_init(funclist)
+        self.dispatch_get_name(funclist)
+        self.loader.write_dispatch(f)
+
+        # generate the loader code
         self.generate_loader(fs, es)
+
+    def dispatch_init(self, funclist):
+        f = self._f_c
+        f.write('void gladDispatchInit(GLADDispatchTable *dispatch) {\n')
+	for func in funclist:
+            f.write('\tdispatch->{}=NULL;\n'.format(func.proto.name[2:]))
+        f.write('}\n')
+
+    def dispatch_offset_enum(self, funclist):
+        f = self._f_h
+        f.write('typedef enum {\n')
+	for func in funclist:
+            f.write('\tGLAD_DISPATCH_{},\n'.format(func.proto.name))
+        f.write('\tGLAD_DISPATCH_COUNT\n')
+        f.write('} GLADDispatchOffset;\n')
+
+    def dispatch_get_name(self, funclist):
+        f = self._f_c
+        f.write('const char *gladGetDispatchName(GLADDispatchOffset offset) {\n')
+        f.write('\tstatic const char *fnames[GLAD_DISPATCH_COUNT]={\n')
+	for func in funclist:
+            f.write('\t\t"{}",\n'.format(func.proto.name))
+        f.write('\t};\n')
+	f.write('\treturn (offset < GLAD_DISPATCH_COUNT)?fnames[offset]:NULL;\n')
+        f.write('};\n')
 
     def write_functions(self, f, write, written, extensions):
         self.write_enums(f, written, extensions)
@@ -94,7 +122,7 @@ class CStructGenerator(CGenerator):
                 if self.spec.NAME in ('gl', 'glx', 'wgl'):
                     f.write('\tif(!features->GLAD_{}) return;\n'.format(feature.name))
                 for func in feature.functions:
-                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}",arg);\n'
+                    f.write('\tdispatch->{0} = (PFN{1}PROC)load(gladGetDispatchName(GLAD_DISPATCH_{2}),arg);\n'
                             .format(func.proto.name[2:], func.proto.name.upper(),func.proto.name))
                 f.write('}\n')
 
@@ -110,7 +138,7 @@ class CStructGenerator(CGenerator):
                 if ext.name == 'GLX_SGIX_dmbuffer': f.write('#ifdef _DM_BUFFER_H_\n')
                 for func in ext.functions:
                     # even if they were in written we need to load it
-                    f.write('\tdispatch->{0} = (PFN{1}PROC)load("{2}",arg);\n'
+                    f.write('\tdispatch->{0} = (PFN{1}PROC)load(gladGetDispatchName(GLAD_DISPATCH_{2}),arg);\n'
                             .format(func.proto.name[2:], func.proto.name.upper(), func.proto.name))
                 if ext.name in ('GLX_SGIX_video_source', 'GLX_SGIX_dmbuffer'):
                     f.write('#else\n')
