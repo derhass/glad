@@ -34,8 +34,9 @@ class CStructGenerator(CGenerator):
 
         f = self._f_c
 	# C code: define the function pointers
-        for func in funclist:
-            self.write_function(f, func)
+	#TODO: will need this for init etc
+        #for func in funclist:
+        #    self.write_function(f, func)
 
 	# generate the loader code
         self.generate_loader(fs, es)
