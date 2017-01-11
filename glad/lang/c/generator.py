@@ -191,14 +191,14 @@ class CGenerator(Generator):
         self.loader.write(f)
         self.loader.write_has_ext(f)
 
-        if self.spec.NAME in ('gl', 'glx', 'wgl'):
-            for feature in features:
-                f.write('int GLAD_{};\n'.format(feature.name))
-
     def generate_features(self, features):
         write = set()
 	self.generate_features_phase1(write, features)
         f = self._f_c
+        if self.spec.NAME in ('gl', 'glx', 'wgl'):
+            for feature in features:
+                f.write('int GLAD_{};\n'.format(feature.name))
+
         for func in write:
             self.write_function(f, func)
 
@@ -209,16 +209,14 @@ class CGenerator(Generator):
         f = self._f_h
         self.write_functions(f, write, written, extensions)
 
+    def generate_extensions(self, extensions, enums, functions):
+        write = set()
+	self.generate_extensions_phase1(write, extensions, enums, functions)
         f = self._f_c
         if self.spec.NAME in ('gl', 'glx', 'wgl'):
             for ext in set(ext.name for ext in extensions):
                 f.write('int GLAD_{};\n'.format(ext))
 
-
-    def generate_extensions(self, extensions, enums, functions):
-        write = set()
-	self.generate_extensions_phase1(write, extensions, enums, functions)
-        f = self._f_c
         written = set()
         for ext in extensions:
             if ext.name == 'GLX_SGIX_video_source': f.write('#ifdef _VL_H_\n')

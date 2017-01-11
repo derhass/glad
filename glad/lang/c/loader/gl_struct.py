@@ -5,11 +5,11 @@ from glad.lang.c.loader import LOAD_OPENGL_DLL, LOAD_OPENGL_DLL_H, LOAD_OPENGL_G
 _OPENGL_LOADER = \
     LOAD_OPENGL_DLL % {'pre':'static', 'init':'open_gl',
                        'proc':'get_proc', 'terminate':'close_gl'} + '''
-int gladLoadGL(GLADDispatchTable *dispatch) {
+int gladLoadGL(GLADFeatures *features, GLADDispatchTable *dispatch) {
     int status = 0;
 
     if(open_gl()) {
-        status = gladLoadGLLoader(dispatch, &get_proc);
+        status = gladLoadGLLoader(features, dispatch, &get_proc);
         close_gl();
     }
 
@@ -18,22 +18,17 @@ int gladLoadGL(GLADDispatchTable *dispatch) {
 '''
 
 _OPENGL_HAS_EXT = '''
-struct gladGLversionStruct GLVersion;
-
 #if defined(GL_ES_VERSION_3_0) || defined(GL_VERSION_3_0)
 #define _GLAD_IS_SOME_NEW_VERSION 1
 #endif
-
-static int max_loaded_major;
-static int max_loaded_minor;
 
 static const char *exts = NULL;
 static int num_exts_i = 0;
 static const char **exts_i = NULL;
 
-static int get_exts(const GLADDispatchTable *dispatch) {
+static int get_exts(const GLADFeatures *features, const GLADDispatchTable *dispatch) {
 #ifdef _GLAD_IS_SOME_NEW_VERSION
-    if(max_loaded_major < 3) {
+    if(features->maxLoadedGLVersion.major < 3) {
 #endif
         exts = (const char *)dispatch->GetString(GL_EXTENSIONS);
 #ifdef _GLAD_IS_SOME_NEW_VERSION
@@ -65,9 +60,9 @@ static void free_exts(void) {
     }
 }
 
-static int has_ext(const char *ext) {
+static int has_ext(const GLADFeatures *features, const char *ext) {
 #ifdef _GLAD_IS_SOME_NEW_VERSION
-    if(max_loaded_major < 3) {
+    if(features->maxLoadedGLVersion.major < 3) {
 #endif
         const char *extensions;
         const char *loc;
@@ -147,13 +142,13 @@ struct gladGLversionStruct {
 
 typedef void* (* GLADloadproc)(const char *name);
 ''' + LOAD_OPENGL_GLAPI_H + '''
-GLAPI struct gladGLversionStruct GLVersion;
 '''
 
 _OPENGL_HEADER_LOADER = '''
+typedef struct GLADFeatures_s GLADFeatures;
 typedef struct GLADDispatchTable_s GLADDispatchTable;
 
-GLAPI int gladLoadGL(GLADDispatchTable *dispatch);
+GLAPI int gladLoadGL(GLADFeatures *features, GLADDispatchTable *dispatch);
 ''' + LOAD_OPENGL_DLL_H
 
 _OPENGL_HEADER_END = '''
@@ -197,8 +192,8 @@ _FIND_VERSION = '''
     sscanf(version, "%d.%d", &major, &minor);
 #endif
 
-    GLVersion.major = major; GLVersion.minor = minor;
-    max_loaded_major = major; max_loaded_minor = minor;
+    features->GLVersion.major = major; features->GLVersion.minor = minor;
+    features->maxLoadedGLVersion.major = major; features->maxLoadedGLVersion.minor = minor;
 '''
 
 
@@ -208,13 +203,13 @@ class OpenGLCStructLoader(OpenGLCLoader):
             fobj.write(_OPENGL_LOADER)
 
     def write_begin_load(self, fobj):
-        fobj.write('\tGLVersion.major = 0; GLVersion.minor = 0;\n')
+        fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load("glGetString");\n')
         fobj.write('\tif(dispatch->GetString == NULL) return 0;\n')
         fobj.write('\tif(dispatch->GetString(GL_VERSION) == NULL) return 0;\n')
 
     def write_end_load(self, fobj):
-        fobj.write('\treturn GLVersion.major != 0 || GLVersion.minor != 0;\n')
+        fobj.write('\treturn features->GLVersion.major != 0 || features->GLVersion.minor != 0;\n')
 
     def write_find_core(self, fobj):
         fobj.write(_FIND_VERSION)
