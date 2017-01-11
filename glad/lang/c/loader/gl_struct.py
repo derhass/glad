@@ -22,52 +22,64 @@ _OPENGL_HAS_EXT = '''
 #define _GLAD_IS_SOME_NEW_VERSION 1
 #endif
 
-static const char *exts = NULL;
-static int num_exts_i = 0;
-static const char **exts_i = NULL;
+typedef struct {
+	const char *exts;
+	int num_exts_i;
+	const char **exts_i;
+} GLADExtensionContext;
 
-static int get_exts(const GLADFeatures *features, const GLADDispatchTable *dispatch) {
+static void
+gladExtensionContextInit(GLADExtensionContext *ctx)
+{
+	ctx->exts=NULL;
+	ctx->num_exts_i=0;
+	ctx->exts_i=NULL;
+}
+
+static int get_exts(GLADExtensionContext *ctx, const GLADFeatures *features, const GLADDispatchTable *dispatch) {
 #ifdef _GLAD_IS_SOME_NEW_VERSION
     if(features->maxLoadedGLVersion.major < 3) {
 #endif
-        exts = (const char *)dispatch->GetString(GL_EXTENSIONS);
+        ctx->exts = (const char *)dispatch->GetString(GL_EXTENSIONS);
 #ifdef _GLAD_IS_SOME_NEW_VERSION
     } else {
         int index;
 
-        num_exts_i = 0;
-        dispatch->GetIntegerv(GL_NUM_EXTENSIONS, &num_exts_i);
-        if (num_exts_i > 0) {
-            exts_i = (const char **)realloc((void *)exts_i, num_exts_i * sizeof *exts_i);
+        ctx->num_exts_i = 0;
+        dispatch->GetIntegerv(GL_NUM_EXTENSIONS, &ctx->num_exts_i);
+        if (ctx->num_exts_i > 0) {
+            ctx->exts_i = (const char **)realloc((void *)ctx->exts_i, ctx->num_exts_i * sizeof(*ctx->exts_i) );
         }
 
-        if (exts_i == NULL) {
+        if (ctx->exts_i == NULL) {
             return 0;
         }
 
-        for(index = 0; index < num_exts_i; index++) {
-            exts_i[index] = (const char*)dispatch->GetStringi(GL_EXTENSIONS, index);
+        for(index = 0; index < ctx->num_exts_i; index++) {
+            ctx->exts_i[index] = (const char*)dispatch->GetStringi(GL_EXTENSIONS, index);
         }
     }
 #endif
     return 1;
 }
 
-static void free_exts(void) {
-    if (exts_i != NULL) {
-        free((char **)exts_i);
-        exts_i = NULL;
+static void free_exts(GLADExtensionContext *ctx) {
+    if (ctx->exts_i != NULL) {
+        free((char **)ctx->exts_i);
+        ctx->exts_i = NULL;
     }
+    ctx->num_exts_i=0;
+    ctx->exts=NULL;
 }
 
-static int has_ext(const GLADFeatures *features, const char *ext) {
+static int has_ext(const GLADExtensionContext *ctx, const GLADFeatures *features, const char *ext) {
 #ifdef _GLAD_IS_SOME_NEW_VERSION
     if(features->maxLoadedGLVersion.major < 3) {
 #endif
         const char *extensions;
         const char *loc;
         const char *terminator;
-        extensions = exts;
+        extensions = ctx->exts;
         if(extensions == NULL || ext == NULL) {
             return 0;
         }
@@ -89,8 +101,8 @@ static int has_ext(const GLADFeatures *features, const char *ext) {
     } else {
         int index;
 
-        for(index = 0; index < num_exts_i; index++) {
-            const char *e = exts_i[index];
+        for(index = 0; index < ctx->num_exts_i; index++) {
+            const char *e = ctx->exts_i[index];
 
             if(strcmp(e, ext) == 0) {
                 return 1;
@@ -203,6 +215,9 @@ class OpenGLCStructLoader(OpenGLCLoader):
             fobj.write(_OPENGL_LOADER)
 
     def write_begin_load(self, fobj):
+        fobj.write('\tGLADExtensionContext ctx;\n')
+        fobj.write('\tgladExtensionContextInit(&ctx);\n')
+        fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load("glGetString");\n')
         fobj.write('\tif(dispatch->GetString == NULL) return 0;\n')

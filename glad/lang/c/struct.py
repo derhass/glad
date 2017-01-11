@@ -117,12 +117,12 @@ class CStructGenerator(CGenerator):
 
                 written.add(ext.name)
 
-            f.write('static int find_extensions{}(GLADFeatures *features, GLADDispatchTable *dispatch) {{\n'.format(api.upper()))
+            f.write('static int find_extensions{}(GLADExtensionContext *ctx, GLADFeatures *features, GLADDispatchTable *dispatch) {{\n'.format(api.upper()))
             if self.spec.NAME in ('gl', 'glx', 'wgl'):
-                f.write('\tif (!get_exts(features, dispatch)) return 0;\n')
+                f.write('\tif (!get_exts(ctx, features, dispatch)) return 0;\n')
                 for ext in extensions[api]:
-                    f.write('\tfeatures->GLAD_{0} = has_ext(features, "{0}");\n'.format(ext.name))
-                f.write('\tfree_exts();\n')
+                    f.write('\tfeatures->GLAD_{0} = has_ext(ctx, features, "{0}");\n'.format(ext.name))
+                f.write('\tfree_exts(ctx);\n')
             f.write('\treturn 1;\n')
             f.write('}\n\n')
 
@@ -163,7 +163,7 @@ class CStructGenerator(CGenerator):
 
             for feature in features[api]:
                 f.write('\tload_{}(features, dispatch, load);\n'.format(feature.name))
-            f.write('\n\tif (!find_extensions{}(features, dispatch)) return 0;\n'.format(api.upper()))
+            f.write('\n\tif (!find_extensions{}(&ctx,features, dispatch)) return 0;\n'.format(api.upper()))
             for ext in extensions[api]:
                 if len(list(ext.functions)) == 0:
                     continue
