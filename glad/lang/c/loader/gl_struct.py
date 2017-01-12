@@ -371,6 +371,7 @@ GLAPI void *gladDispatchGetOffsetAddress(GLADDispatchTable *dispatch, GLADDispat
 GLAPI void gladDispatchSetOffsetAddress(GLADDispatchTable *dispatch, GLADDispatchOffset doffset, void *proc);
 GLAPI void *gladDispatchGetProcAddress(GLADDispatchTable *dispatch, const char *name);
 GLAPI void gladDispatchSetProcAddress(GLADDispatchTable *dispatch, const char *name, void *proc);
+GLAPI void gladDispatchResolveAliasing(GLADDispatchTable *dispatch);
 '''
 
 class OpenGLCStructLoader(OpenGLCLoader):
@@ -381,6 +382,7 @@ class OpenGLCStructLoader(OpenGLCLoader):
     def write_begin_load(self, fobj):
         fobj.write('\tGLADExtensionContext ctx;\n')
         fobj.write('\tgladExtensionContextInit(&ctx);\n')
+        fobj.write('\tgladDispatchInit(dispatch);\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tfeatures->GLVersion.major = 0; features->GLVersion.minor = 0;\n')
         fobj.write('\tdispatch->GetString = (PFNGLGETSTRINGPROC)load(gladGetDispatchName(GLAD_DISPATCH_glGetString), arg);\n')

@@ -1,4 +1,5 @@
 from glad.lang.c.generator import CGenerator
+from glad.util import calc_alias_dict
 
 class CStructGenerator(CGenerator):
     NAME = 'c-struct'
@@ -39,6 +40,8 @@ class CStructGenerator(CGenerator):
         f = self._f_c
         self.dispatch_init(funclist)
         self.dispatch_get_name(funclist)
+        alias=calc_alias_dict(funclist)
+        self.dispatch_resolve_aliasing(funclist, alias)
         self.loader.write_dispatch(f)
 
         # generate the loader code
@@ -67,7 +70,21 @@ class CStructGenerator(CGenerator):
             f.write('\t\t"{}",\n'.format(func.proto.name))
         f.write('\t};\n')
 	f.write('\treturn (offset < GLAD_DISPATCH_COUNT)?fnames[offset]:NULL;\n')
-        f.write('};\n')
+        f.write('}\n')
+
+    def dispatch_resolve_aliasing(self, funclist, alias):
+        f = self._f_c
+        f.write('void gladDispatchResolveAliasing(GLADDispatchTable *dispatch) {\n')
+        f.write('\t/* NOTE: a non-NULL pointer in the dispatch table guarantees that the\n')
+        f.write('\t         function is available since we only load functions if\n')
+        f.write('\t         its presence is implicated by GL version or extension string */\n')
+        for func in funclist:
+            if func.proto.name in alias:
+                for afunc in alias[func.proto.name]:
+                    if afunc != func.proto.name:
+                        f.write('\tif ((dispatch->{0} == NULL) && (dispatch->{1} != NULL)) dispatch->{0}=(PFN{2}PROC)dispatch->{1};\n'.format(
+                            func.proto.name[2:],afunc[2:],func.proto.name.upper()))
+        f.write('}\n')
 
     def write_functions(self, f, write, written, extensions):
         self.write_enums(f, written, extensions)
